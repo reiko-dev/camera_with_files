@@ -43,11 +43,14 @@ class VideoPlayerState extends State<VideoPlayer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: _controller.value.isInitialized
-            ? vp.VideoPlayer(_controller)
-            : const SizedBox.shrink(),
-      ),
+      body: _controller.value.isInitialized
+          ? Center(
+              child: AspectRatio(
+                aspectRatio: _controller.value.aspectRatio,
+                child: vp.VideoPlayer(_controller),
+              ),
+            )
+          : const SizedBox.shrink(),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           isPlaying ? _controller.pause() : _controller.play();
