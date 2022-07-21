@@ -2,10 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:camera_with_files/permission_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:gallery_saver/gallery_saver.dart';
 import 'package:image/image.dart' as img;
-import 'package:media_scanner/media_scanner.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -99,27 +100,33 @@ class CustomCameraController extends ChangeNotifier {
   /// The directory name to be used for storing the files if [storeOnGallery] is true.
   ///
   String? directoryName;
-  Directory? rootDirectory;
 
   // Permission related
+  bool _isAskingPermission = false;
   bool storeOnGallery = false;
-  bool isAskingPermission = false;
-  bool hasMicrophonePermission = false;
   final hasCameraPermission = ValueNotifier(false);
+  var _micPermissionState = PermissionState.notAsked;
   // Required for storing media on the documents folder
-  bool hasStoragePermission = false;
-  bool hasIOSPhotosPermission = false;
+  var _storagePermissionState = PermissionState.notAsked;
+  var _iosPhotosPermissionState = PermissionState.notAsked;
+  // This variable is necessary for avoiding errors when updating the cameraValue synchronized with the Lifecycle events
+  // Because on the initialization and on the lifecycle we can have concurrent calls to the updateCamera method.
+  bool _isUpdatingCamera = false;
 
   Future<void> _init() async {
-    if (!await _requestPermissions()) return;
+    if (!await _loadCameras()) return;
+    hasCameraPermission.value =
+        await _requestPermission(Permission.camera) == PermissionState.granted;
 
-    cameras.value = await availableCameras();
+    if (!hasCameraPermission.value) return;
+
+    _micPermissionState = await _requestPermission(Permission.microphone);
+
+    if (controller.value == null) {
+      await _updateSelectedCamera();
+    }
 
     _loadImages();
-
-    await updateSelectedCamera();
-
-    rootDirectory = await _filesDirectory;
 
     imagesCarouselController.addListener(() {
       if (!imagesCarouselController.hasClients) return;
@@ -139,6 +146,17 @@ class CustomCameraController extends ChangeNotifier {
         }
       }
     });
+  }
+
+  /// Load the list of available cameras of the device
+  Future<bool> _loadCameras() async {
+    cameras.value = await availableCameras();
+    if (cameras.value.isEmpty) {
+      _showCameraException(
+          "Not found camera on this device.", "CAMERA_NOT_FOUND");
+      return false;
+    }
+    return true;
   }
 
   @override
@@ -167,6 +185,8 @@ class CustomCameraController extends ChangeNotifier {
   bool get isTakingPicture => controller.value?.value.isTakingPicture == true;
 
   void updatedLifecycle(AppLifecycleState state) async {
+    if (_isAskingPermission) return;
+
     final CameraController? oldController = controller.value;
 
     // App state changed before we got the chance to initialize.
@@ -175,23 +195,31 @@ class CustomCameraController extends ChangeNotifier {
       return;
     }
 
-    if (isAskingPermission) return;
-
     switch (state) {
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
-        if (_isRecordingVideo) {
-          await stopVideoRecording();
-        }
+        releaseCamera();
         break;
 
       case AppLifecycleState.resumed:
-        updateSelectedCamera(cameraDescription: oldController?.description);
+        _updateSelectedCamera(cameraDescription: oldController?.description);
         break;
 
       default:
         break;
     }
+  }
+
+  Future<void> releaseCamera() async {
+    if (controller.value == null) return;
+
+    if (_isRecordingVideo) {
+      await stopVideoRecording();
+    }
+    //Disposing the oldCamera
+    final CameraController? oldController = controller.value;
+    controller.value = null;
+    await oldController?.dispose();
   }
 
   bool get _isRecordingVideo {
@@ -200,35 +228,29 @@ class CustomCameraController extends ChangeNotifier {
     return controller.value!.value.isRecordingVideo;
   }
 
-  Future<void> updateSelectedCamera(
+  Future<void> _updateSelectedCamera(
       {CameraDescription? cameraDescription}) async {
-    final CameraController? oldController = controller.value;
-    controller.value = null;
-    await oldController?.dispose();
+    if (cameras.value.isEmpty) return;
 
-    late final CameraController cameraController;
+    if (_isUpdatingCamera) return;
 
-    if (cameraDescription != null) {
-      cameraController = CameraController(
-        cameraDescription,
-        cameraResolution,
-        imageFormatGroup: ImageFormatGroup.jpeg,
-        enableAudio: hasMicrophonePermission,
-      );
-    } else {
-      cameraController = CameraController(
-        cameras.value[currentCameraIndex],
-        imageFormatGroup: ImageFormatGroup.jpeg,
-        cameraResolution,
-        enableAudio: hasMicrophonePermission,
-      );
-    }
+    _isUpdatingCamera = true;
+    await releaseCamera();
+
+    //Instantiate a new camera
+    final cameraController = CameraController(
+      cameraDescription ?? cameras.value[currentCameraIndex],
+      cameraResolution,
+      imageFormatGroup: ImageFormatGroup.jpeg,
+      enableAudio: _micPermissionState == PermissionState.granted,
+    );
 
     // If the controller is updated then update the UI.
     cameraController.addListener(() {
       if (cameraController.value.hasError) {
         showInSnackBar(
-            'Camera error ${cameraController.value.errorDescription}');
+          'Camera error ${cameraController.value.errorDescription}',
+        );
       }
     });
 
@@ -270,18 +292,22 @@ class CustomCameraController extends ChangeNotifier {
           _showCameraException(e);
           break;
       }
+    } finally {
+      _isUpdatingCamera = false;
     }
   }
 
   void showInSnackBar(String message) {
+    //TODO: add snackbar
     debugPrint("========\n$message");
   }
 
   // TODO: Extract to Usecase
   void _loadImages() async {
-    if (kIsWeb || !hasStoragePermission) {
-      return;
-    }
+    if (kIsWeb) return;
+
+    if (!await _canLoadImages) return;
+
     imageAlbums = await PhotoGallery.listAlbums(
       mediumType: MediumType.image,
     );
@@ -298,35 +324,42 @@ class CustomCameraController extends ChangeNotifier {
     }
   }
 
-  Future<bool> _requestPermissions() async {
-    if (kIsWeb) return false;
-    isAskingPermission = true;
-
-    try {
-      hasStoragePermission = await _requestPermission(Permission.storage);
-
-      hasCameraPermission.value = await _requestPermission(Permission.camera);
-
-      hasMicrophonePermission = await _requestPermission(Permission.microphone);
-
-      if (Platform.isIOS) {
-        hasIOSPhotosPermission = await _requestPermission(Permission.photos);
-      }
-
-      return hasCameraPermission.value;
-    } catch (e) {
-      debugPrint("Error asking permission");
-      debugPrint(e.toString());
+  Future<bool> get _canLoadImages async {
+    bool hasPermission = false;
+    if (Platform.isAndroid) {
+      hasPermission = _storagePermissionState == PermissionState.granted;
+    } else {
+      hasPermission = _iosPhotosPermissionState == PermissionState.granted;
     }
-
-    isAskingPermission = true;
-    return false;
+    return hasPermission;
   }
 
-  Future<bool> _requestPermission(Permission p) async {
-    if (await p.isGranted) return true;
+  /// Request a permission with two conditions:
+  /// 1. The permission wasn't asked before
+  /// 2. There isn't another request being made at the same time.
+  Future<PermissionState> _requestPermission(Permission permission) async {
+    if (kIsWeb || _isAskingPermission) {
+      return PermissionState.denied;
+    }
 
-    return (await p.request()).isGranted;
+    _isAskingPermission = true;
+
+    if (await permission.isGranted) {
+      _isAskingPermission = false;
+      return PermissionState.granted;
+    }
+
+    try {
+      return (await permission.request()).isGranted
+          ? PermissionState.granted
+          : PermissionState.denied;
+    } catch (e) {
+      debugPrint("PERMISSION_ERROR");
+      debugPrint(e.toString());
+      return PermissionState.denied;
+    } finally {
+      _isAskingPermission = false;
+    }
   }
 
   Future<void> takePicture(double deviceAspectRatio) async {
@@ -334,15 +367,19 @@ class CustomCameraController extends ChangeNotifier {
       return;
     }
 
-    XFile xfile = await controller.value!.takePicture();
+    try {
+      await controller.value!.lockCaptureOrientation();
+      XFile xfile = await controller.value!.takePicture();
+      image = await _processImage(File(xfile.path), deviceAspectRatio);
+
+      if (image != null) {
+        _saveOnGallery(image!, isPicture: true);
+      }
+    } catch (e) {
+      print(e);
+    }
 
     if (kIsWeb) return;
-
-    image = await _processImage(File(xfile.path), deviceAspectRatio);
-
-    if (image != null) {
-      _saveOnGallery(image!, isPicture: true);
-    }
   }
 
   /// This process is required to for cropping full screen pictures.
@@ -418,48 +455,46 @@ class CustomCameraController extends ChangeNotifier {
 
   // TODO: Extract to Usecase
   Future<File?> _saveOnGallery(File file, {bool isPicture = false}) async {
-    if (!hasStoragePermission || !storeOnGallery || directoryName == null) {
+    if (!storeOnGallery) {
       return null;
     }
 
-    try {
-      File? finalFile;
-      if (Platform.isAndroid) {
-        late ScannerResultModel result;
-        try {
-          if (isPicture) {
-            result = await MediaScanner.saveImage(file.readAsBytesSync());
-          } else {
-            result = await MediaScanner.saveFile(file.path);
-          }
+    late final bool hasPermission;
+    if (Platform.isAndroid) {
+      _storagePermissionState = await _requestPermission(Permission.storage);
 
-          if (result.isSuccess && result.filePath != null) {
-            finalFile = File(result.filePath!);
-          } else {
-            throw Exception(result.errorMessage);
-          }
-        } catch (e) {
-          _showCameraException(e, "MediaScannerExcetion");
-        }
-      } else {
-        rootDirectory = rootDirectory ?? await _filesDirectory;
-        //TODO: If needed, scan the new media for IOs too.
-        finalFile = File("$rootDirectory")
-          ..writeAsBytes(file.readAsBytesSync());
-      }
-
-      return finalFile;
-    } catch (e) {
-      _showCameraException(e, "MediaScannerExcetion");
+      hasPermission = _storagePermissionState == PermissionState.granted;
+    } else {
+      _iosPhotosPermissionState = await _requestPermission(Permission.photos);
+      hasPermission = _iosPhotosPermissionState == PermissionState.granted;
     }
-    return null;
+
+    if (!hasPermission) {
+      return null;
+    }
+
+    bool? result;
+    if (isPicture) {
+      result = await GallerySaver.saveImage(file.path, albumName: "sidestory");
+    } else {
+      result = await GallerySaver.saveVideo(file.path, albumName: "sidestory");
+    }
+
+    if (result != null && result) {
+      print("success!");
+    } else {
+      print("Error!");
+    }
+
+    return file;
   }
 
   Future<Directory?> get _filesDirectory async {
-    if (Platform.isAndroid && hasStoragePermission) {
+    if (Platform.isAndroid &&
+        _storagePermissionState == PermissionState.granted) {
       return await getExternalStorageDirectory();
     } else {
-      if (hasIOSPhotosPermission) {
+      if (_iosPhotosPermissionState == PermissionState.granted) {
         return await getApplicationDocumentsDirectory();
       }
     }
@@ -473,7 +508,7 @@ class CustomCameraController extends ChangeNotifier {
       currentCameraIndex++;
     }
 
-    updateSelectedCamera();
+    _updateSelectedCamera();
   }
 
   void toggleFlash() {
@@ -509,27 +544,25 @@ class CustomCameraController extends ChangeNotifier {
   }
 
   Future<void> stopVideoRecording() async {
-    final result = await _stopVideoRecording();
+    final CameraController? cameraController = controller.value;
+
+    XFile? result;
+    if (cameraController == null || !cameraController.value.isRecordingVideo) {
+      result = null;
+    } else {
+      try {
+        result = await cameraController.stopVideoRecording();
+      } on CameraException catch (e) {
+        _showCameraException(e, "ERROR STOPPING THE RECORDING");
+        result = null;
+      }
+    }
+
     _cancelDurationTimer();
     if (result != null) {
       final file = File(result.path);
       videoFile = file;
       await _saveOnGallery(file);
-    }
-  }
-
-  Future<XFile?> _stopVideoRecording() async {
-    final CameraController? cameraController = controller.value;
-
-    if (cameraController == null || !cameraController.value.isRecordingVideo) {
-      return null;
-    }
-
-    try {
-      return await cameraController.stopVideoRecording();
-    } on CameraException catch (e) {
-      _showCameraException(e, "ERROR WHEN STOPPING THE VIDEO");
-      return null;
     }
   }
 

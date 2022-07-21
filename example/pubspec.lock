@@ -170,6 +170,13 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  gallery_saver:
+    dependency: transitive
+    description:
+      name: gallery_saver
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.3.2"
   html:
     dependency: transitive
     description:
@@ -177,6 +184,20 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.15.0"
+  http:
+    dependency: transitive
+    description:
+      name: http
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.13.4"
+  http_parser:
+    dependency: transitive
+    description:
+      name: http_parser
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "4.0.1"
   image:
     dependency: transitive
     description:
@@ -226,15 +247,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.1.4"
-  media_scanner:
-    dependency: transitive
-    description:
-      path: "."
-      ref: HEAD
-      resolved-ref: b19fa1a2d225bb1cd6de712663564e8487454706
-      url: "https://github.com/reiko-dev/media_scanner.git"
-    source: git
-    version: "2.1.0"
   meta:
     dependency: transitive
     description:
