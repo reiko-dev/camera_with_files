@@ -21,11 +21,7 @@ dependencies:
   video_player: ^2.4.5
   image: ^3.2.0
 
-  # Storage related
-  # Required to show the created files on the gallery of the O.S.
-  media_scanner:
-    git:
-      url: https://github.com/reiko-dev/media_scanner.git
+  gallery_saver: ^2.3.2
 
   path_provider: ^2.0.11
   path: ^1.8.1
