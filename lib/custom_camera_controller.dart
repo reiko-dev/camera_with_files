@@ -8,9 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:gallery_saver/gallery_saver.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:photo_gallery/photo_gallery.dart';
 import 'package:video_player/video_player.dart';
 
 class InheritedCameraController extends InheritedWidget {
@@ -55,23 +53,9 @@ class CustomCameraController extends ChangeNotifier {
     }
 
     this.compressionQuality = (compressionQuality * 100).toInt();
-    this.isMultipleSelection.value = isMultipleSelection;
 
     _init();
   }
-
-  //TODO: Allow multiple selection
-  final isMultipleSelection = ValueNotifier(false);
-
-  // Related to Gallery media listing
-  var selectedIndexes = ValueNotifier<List<int>>([]);
-  var imageMedium = ValueNotifier<Set<Medium>>({});
-  var isExpandedPicturesPanel = ValueNotifier(false);
-  var count = ValueNotifier<int>(0);
-  List<Album> imageAlbums = [];
-  int pageIndex = 1;
-  int pageCount = 10;
-  final imagesCarouselController = ScrollController();
 
   // Camera related
   final controller = ValueNotifier<CameraController?>(null);
@@ -87,7 +71,6 @@ class CustomCameraController extends ChangeNotifier {
   VideoPlayerController? videoController;
   VoidCallback? videoPlayerListener;
   File? videoFile;
-
   //Video Duration Related
   //Trigger the UI update
   final timeInSeconds = ValueNotifier<int?>(null);
@@ -98,7 +81,6 @@ class CustomCameraController extends ChangeNotifier {
 
   // Storage related
   /// The directory name to be used for storing the files if [storeOnGallery] is true.
-  ///
   String? directoryName;
 
   // Permission related
@@ -125,27 +107,6 @@ class CustomCameraController extends ChangeNotifier {
     if (controller.value == null) {
       await _updateSelectedCamera();
     }
-
-    _loadImages();
-
-    imagesCarouselController.addListener(() {
-      if (!imagesCarouselController.hasClients) return;
-
-      if (imagesCarouselController.position.atEdge) {
-        bool isTop = imagesCarouselController.position.pixels == 0;
-        if (!isTop) {
-          if (imageMedium.value.length > (pageCount * pageIndex)) {
-            pageIndex++;
-
-            if (pageCount * (pageIndex) > imageMedium.value.length) {
-              count.value = imageMedium.value.length;
-            } else {
-              count.value = pageCount * pageIndex;
-            }
-          }
-        }
-      }
-    });
   }
 
   /// Load the list of available cameras of the device
@@ -161,20 +122,12 @@ class CustomCameraController extends ChangeNotifier {
 
   @override
   void dispose() {
-    isMultipleSelection.dispose();
-    selectedIndexes.dispose();
-    imageMedium.dispose();
-
+    //Camera related
     controller.dispose();
-
     isFlashOn.dispose();
-    isExpandedPicturesPanel.dispose();
-    count.dispose();
     cameras.dispose();
 
     videoController?.dispose();
-
-    imagesCarouselController.dispose();
 
     //Duration Timer related
     timeInSeconds.dispose();
@@ -300,38 +253,6 @@ class CustomCameraController extends ChangeNotifier {
   void showInSnackBar(String message) {
     //TODO: add snackbar
     debugPrint("========\n$message");
-  }
-
-  // TODO: Extract to Usecase
-  void _loadImages() async {
-    if (kIsWeb) return;
-
-    if (!await _canLoadImages) return;
-
-    imageAlbums = await PhotoGallery.listAlbums(
-      mediumType: MediumType.image,
-    );
-
-    for (var element in imageAlbums) {
-      var data = await element.listMedia();
-      imageMedium.value.addAll(data.items);
-    }
-
-    if (pageCount * (pageIndex) > imageMedium.value.length) {
-      count.value = imageMedium.value.length;
-    } else {
-      count.value = pageCount * (pageIndex);
-    }
-  }
-
-  Future<bool> get _canLoadImages async {
-    bool hasPermission = false;
-    if (Platform.isAndroid) {
-      hasPermission = _storagePermissionState == PermissionState.granted;
-    } else {
-      hasPermission = _iosPhotosPermissionState == PermissionState.granted;
-    }
-    return hasPermission;
   }
 
   /// Request a permission with two conditions:
@@ -475,9 +396,11 @@ class CustomCameraController extends ChangeNotifier {
 
     bool? result;
     if (isPicture) {
-      result = await GallerySaver.saveImage(file.path, albumName: "sidestory");
+      result =
+          await GallerySaver.saveImage(file.path, albumName: directoryName);
     } else {
-      result = await GallerySaver.saveVideo(file.path, albumName: "sidestory");
+      result =
+          await GallerySaver.saveVideo(file.path, albumName: directoryName);
     }
 
     if (result != null && result) {
@@ -487,18 +410,6 @@ class CustomCameraController extends ChangeNotifier {
     }
 
     return file;
-  }
-
-  Future<Directory?> get _filesDirectory async {
-    if (Platform.isAndroid &&
-        _storagePermissionState == PermissionState.granted) {
-      return await getExternalStorageDirectory();
-    } else {
-      if (_iosPhotosPermissionState == PermissionState.granted) {
-        return await getApplicationDocumentsDirectory();
-      }
-    }
-    return null;
   }
 
   void switchCamera() {
@@ -650,19 +561,5 @@ class CustomCameraController extends ChangeNotifier {
     timer?.cancel();
     timer = null;
     timeInSeconds.value = null;
-  }
-
-  void addToSelection(int index) async {
-    if (!isMultipleSelection.value && selectedIndexes.value.isNotEmpty) {
-      return;
-    }
-
-    if (selectedIndexes.value.contains(index)) {
-      selectedIndexes.value.remove(index);
-    } else {
-      selectedIndexes.value.add(index);
-    }
-
-    selectedIndexes.notifyListeners();
   }
 }
