@@ -8,74 +8,27 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:photo_gallery/photo_gallery.dart';
 
 class CameraApp extends StatefulWidget {
-  const CameraApp({
-    super.key,
-    this.compressionQuality = 1,
-    this.isMultipleSelection = true,
-    this.cameraResolution = ResolutionPreset.max,
-    this.showGallery = true,
-    this.showOpenGalleryButton = true,
-    this.isFullScreen = true,
-    this.storeOnGallery = false,
-    this.directoryName,
-  }) : assert(
-          compressionQuality > 0 && compressionQuality <= 1,
-          "compressionQuality value must be bettwen 0 (exclusive) and 1 (inclusive)",
-        );
+  const CameraApp({super.key, required this.controller});
 
-  final bool isMultipleSelection;
-  final double compressionQuality;
-  final ResolutionPreset cameraResolution;
-  final bool showGallery;
-  final bool showOpenGalleryButton;
-  final bool isFullScreen;
-  final bool storeOnGallery;
-
-  /// The directory name to be used for storing the files if [storeOnGallery] is true.
-  /// Enter an aplhanumeric WORD, e.g.: myFolder, myFirstDirectory, directory32
-  final String? directoryName;
+  final CustomCameraController controller;
 
   @override
   State<CameraApp> createState() => _CameraAppState();
 }
 
 class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
-  late CustomCameraController controller;
+  late CustomCameraController controller = widget.controller;
 
   @override
   void initState() {
     super.initState();
-    controller = CustomCameraController(
-      compressionQuality: widget.compressionQuality,
-      isMultipleSelection: widget.isMultipleSelection,
-      cameraResolution: widget.cameraResolution,
-      isFullScreen: widget.isFullScreen,
-      storeOnGallery: widget.storeOnGallery,
-      directoryName: widget.directoryName,
-    );
     WidgetsBinding.instance.addObserver(this);
   }
 
   void updateSystemUI() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (widget.showGallery) {
-      precacheImage(
-        const AssetImage(
-          "assets/placeholder.png",
-          package: "camera_with_files",
-        ),
-        context,
-      );
-    }
   }
 
   @override
@@ -136,7 +89,7 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
                           return const SizedBox.shrink();
                         }
 
-                        if (!widget.isFullScreen) {
+                        if (!controller.isFullScreen) {
                           return Center(child: CameraPreview(val));
                         }
 
@@ -156,7 +109,7 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
                       }
                       return child!;
                     },
-                    child: widget.isFullScreen
+                    child: controller.isFullScreen
                         ? const FullScreenUI()
                         : const CroppedScreenUI(),
                   )
@@ -216,14 +169,7 @@ class CroppedScreenUI extends StatelessWidget {
 }
 
 class CroppedScreenBottomPanel extends StatelessWidget {
-  const CroppedScreenBottomPanel({
-    Key? key,
-    this.showGallery = false,
-    this.showOpenGalleryButton = false,
-  }) : super(key: key);
-
-  final bool showGallery;
-  final bool showOpenGalleryButton;
+  const CroppedScreenBottomPanel({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -234,9 +180,6 @@ class CroppedScreenBottomPanel extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          //Photographs gallery
-          if (showGallery) const Gallery(),
-
           DecoratedBox(
             decoration:
                 BoxDecoration(color: const Color(0xFF333333).withOpacity(.34)),
@@ -365,14 +308,7 @@ class FullScreenUI extends StatelessWidget {
 }
 
 class FullScreenBottomPanel extends StatelessWidget {
-  const FullScreenBottomPanel({
-    Key? key,
-    this.showGallery = false,
-    this.showOpenGalleryButton = false,
-  }) : super(key: key);
-
-  final bool showGallery;
-  final bool showOpenGalleryButton;
+  const FullScreenBottomPanel({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -383,9 +319,6 @@ class FullScreenBottomPanel extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          //Photographs gallery
-          if (showGallery) const Gallery(),
-
           DecoratedBox(
             decoration:
                 BoxDecoration(color: const Color(0xFF333333).withOpacity(.34)),
@@ -498,66 +431,6 @@ class DurationCounter extends StatelessWidget {
   }
 }
 
-class Gallery extends StatelessWidget {
-  const Gallery({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = InheritedCameraController.of(context);
-    return SizedBox(
-      height: 130,
-      child: Stack(
-        children: [
-          Column(
-            children: [
-              ValueListenableBuilder<bool>(
-                valueListenable: controller.isExpandedPicturesPanel,
-                builder: (context, isExpanded, child) {
-                  if (isExpanded && !Platform.isIOS) {
-                    return const SizedBox(height: 48);
-                  }
-                  return child!;
-                },
-                child: const ExpandPicturesPanelButton(),
-              ),
-              if (!kIsWeb) const ImagesCarousel(),
-            ],
-          ),
-          const Positioned(
-            top: 20,
-            right: 0,
-            child: BadgeButton(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class ExpandPicturesPanelButton extends StatelessWidget {
-  const ExpandPicturesPanelButton({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = InheritedCameraController.of(context);
-
-    return GestureDetector(
-      onTap: () async {
-        controller.isExpandedPicturesPanel.value = true;
-      },
-      child: Container(
-        color: Colors.transparent,
-        height: 48,
-        width: MediaQuery.of(context).size.width,
-        child: const Icon(
-          Icons.arrow_drop_up_outlined,
-          color: Colors.white,
-        ),
-      ),
-    );
-  }
-}
-
 class ActionButton extends StatefulWidget {
   const ActionButton({Key? key}) : super(key: key);
 
@@ -651,136 +524,6 @@ class _ActionButtonState extends State<ActionButton>
           ),
         ),
       ),
-    );
-  }
-}
-
-class BadgeButton extends StatelessWidget {
-  const BadgeButton({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = InheritedCameraController.of(context);
-
-    return ValueListenableBuilder<List<int>>(
-        valueListenable: controller.selectedIndexes,
-        builder: (_, val, child) {
-          if (val.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          return GestureDetector(
-            onTap: () {
-              debugPrint(" ");
-            },
-            child: SizedBox.square(
-              dimension: 48,
-              child: DecoratedBox(
-                decoration: const BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const Icon(Icons.check, color: Colors.white),
-                    Align(
-                      alignment: const Alignment(.5, .6),
-                      child: Text(
-                        val.length.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        });
-  }
-}
-
-class ImagesCarousel extends StatelessWidget {
-  const ImagesCarousel({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = InheritedCameraController.of(context);
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      controller: controller.imagesCarouselController,
-      child: ValueListenableBuilder<int>(
-          valueListenable: controller.count,
-          builder: (context, value, child) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: List.generate(value, (index) {
-                return GestureDetector(
-                  onLongPress: () => controller.addToSelection(index),
-                  onTap: () async {
-                    if (controller.selectedIndexes.value.isEmpty) {
-                      controller.addToSelection(index);
-                      debugPrint("showImagesPreview");
-                    } else {
-                      controller.addToSelection(index);
-                    }
-                  },
-                  child: Stack(
-                    children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        margin: const EdgeInsets.only(left: 2),
-                        child: FadeInImage(
-                          fit: BoxFit.cover,
-                          placeholder: const AssetImage(
-                            "assets/placeholder.png",
-                            package: "camera_with_files",
-                          ),
-                          image: ThumbnailProvider(
-                            mediumId: controller.imageMedium.value
-                                .elementAt(index)
-                                .id,
-                            mediumType: MediumType.image,
-                            width: 128,
-                            height: 128,
-                            highQuality: false,
-                          ),
-                        ),
-                      ),
-                      ValueListenableBuilder<List<int>>(
-                        valueListenable: controller.selectedIndexes,
-                        builder: (_, value, child) {
-                          if (value.contains(index)) {
-                            return child!;
-                          }
-
-                          return const SizedBox.shrink();
-                        },
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          margin: const EdgeInsets.only(left: 2),
-                          color: Colors.grey.withOpacity(0.4),
-                          child: const Center(
-                            child: Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 36,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            );
-          }),
     );
   }
 }

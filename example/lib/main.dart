@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:camera_with_files/camera_with_files.dart';
+import 'package:camera_with_files/custom_camera_controller.dart';
 import 'package:example/video_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +35,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  String? directory = "sidestory";
+
   File? file;
   bool isFullScreen = false;
 
@@ -54,13 +57,12 @@ class _HomePageState extends State<HomePage> {
     var data = await Navigator.of(context).push(
       MaterialPageRoute<File>(
         builder: (_) => CameraApp(
-          compressionQuality: 1.0,
-          isMultipleSelection: false,
-          showGallery: false,
-          showOpenGalleryButton: false,
-          isFullScreen: isFullScreen,
-          storeOnGallery: true,
-          directoryName: "sidestory",
+          controller: CustomCameraController(
+            compressionQuality: 1.0,
+            isFullScreen: isFullScreen,
+            storeOnGallery: true,
+            directoryName: directory,
+          ),
         ),
       ),
     );
@@ -99,8 +101,20 @@ class _HomePageState extends State<HomePage> {
                         size: size,
                         child: Image.file(file!, fit: BoxFit.contain),
                       ),
-
-              // if (files.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SizedBox(
+                  width: 210,
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      label: Text("Enter a directory"),
+                    ),
+                    onChanged: (val) {
+                      directory = val;
+                    },
+                  ),
+                ),
+              ),
               Column(
                 children: [
                   ElevatedButton(
@@ -111,6 +125,7 @@ class _HomePageState extends State<HomePage> {
                     onPressed: () => onTap(false),
                     child: const Text("Cropped screen"),
                   ),
+                  const SizedBox(height: 16),
                 ],
               ),
             ],
