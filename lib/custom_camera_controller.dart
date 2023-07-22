@@ -297,7 +297,7 @@ class CustomCameraController extends ChangeNotifier {
         _saveOnGallery(image!, isPicture: true);
       }
     } catch (e) {
-      print(e);
+      debugPrint(e.toString());
     }
 
     if (kIsWeb) return;
@@ -332,14 +332,14 @@ class CustomCameraController extends ChangeNotifier {
 
         final newWidth = originalImg.width * newWidthScale;
 
-        final cropSize = originalImg.width - newWidth;
-
         processedImage = img.copyCrop(
           originalImg,
-          cropSize ~/ 2,
-          0,
-          newWidth.toInt(),
-          originalImg.height,
+          height: originalImg.height,
+          width: newWidth.toInt(),
+          x: (originalImg.width - newWidth) ~/ 2,
+          y: 0,
+          antialias: true,
+          radius: 0,
         );
       } else {
         //Imagem capturada é mais comprida que o viewport.
@@ -349,14 +349,14 @@ class CustomCameraController extends ChangeNotifier {
 
         final newHeight = originalImg.height * newHeightScale;
 
-        final cropSize = originalImg.height - newHeight;
-
         processedImage = img.copyCrop(
           originalImg,
-          0,
-          cropSize ~/ 2,
-          originalImg.width,
-          newHeight.toInt(),
+          height: newHeight.toInt(),
+          width: originalImg.width,
+          x: 0,
+          y: (originalImg.height - newHeight) ~/ 2,
+          antialias: true,
+          radius: 0,
         );
       }
     } else {
@@ -404,9 +404,9 @@ class CustomCameraController extends ChangeNotifier {
     }
 
     if (result != null && result) {
-      print("success!");
+      debugPrint("success!");
     } else {
-      print("Error!");
+      debugPrint("Error!");
     }
 
     return file;

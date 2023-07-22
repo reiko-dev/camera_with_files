@@ -12,21 +12,21 @@ dependencies:
     sdk: flutter
 
   # Images viewer
-  photo_gallery: ^1.1.1
-  image_gallery_saver: ^1.7.1
+  photo_gallery: ^2.0.2
+  image_gallery_saver: ^2.0.3
 
   permission_handler: ^10.0.0
 
-  camera: ^0.9.8+1
+  camera: ^0.10.5+2
   video_player: ^2.4.5
-  image: ^3.2.0
+  image: ^4.0.17
 
   gallery_saver: ^2.3.2
 
   path_provider: ^2.0.11
   path: ^1.8.1
 
-  intl: ^0.17.0
+  intl: ^0.18.1
 
 dev_dependencies:
   flutter_test:
