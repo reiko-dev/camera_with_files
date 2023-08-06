@@ -5,8 +5,8 @@ import 'package:camera/camera.dart';
 import 'package:camera_with_files/permission_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:gallery_saver/gallery_saver.dart';
 import 'package:image/image.dart' as img;
+import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:path/path.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
@@ -396,11 +396,9 @@ class CustomCameraController extends ChangeNotifier {
 
     bool? result;
     if (isPicture) {
-      result =
-          await GallerySaver.saveImage(file.path, albumName: directoryName);
+      result = await ImageGallerySaver.saveImage(await file.readAsBytes());
     } else {
-      result =
-          await GallerySaver.saveVideo(file.path, albumName: directoryName);
+      result = await ImageGallerySaver.saveFile(file.path);
     }
 
     if (result != null && result) {
